@@ -30,10 +30,12 @@ __all__ = ['strip_url',
 
 __author__ = 'Leon Yin'
 
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36'}
+
 def strip_url(url):
     '''
     Best attempt to standardize websites.
-    
+
     :input url: a string of a URl
     :returns: a URL stripped of www. and https:
     '''
@@ -53,7 +55,7 @@ def get_domain(url):
     '''
     Returns domain name of a URL (and removes "www.")
     e.g. 'https://www.nytimes.com/2016/12/23/upshot/...' to 'nytimes.com'
-    
+
     :input url: a string of a url, can contain https://
     :returns: a string of the domain
     '''
@@ -69,24 +71,24 @@ def get_domain(url):
 
 def is_short(url, list_of_domains=constants.all_short_domains):
     '''
-    Returns True if a domain is in a list_of_domains. 
+    Returns True if a domain is in a list_of_domains.
     Make sure that domain and list_of_domains is preprocessed (or not at all),
     in the same way.
-    
+
     :input domain: (str) a standardized domain name
     :input list_of_domains: (list of str) of standardized domain names
     :returns: boolean
     '''
     domain = get_domain(url)
-    
+
     return _is_short_domain(domain, list_of_domains=list_of_domains)
 
 def _is_short_domain(domain, list_of_domains=constants.all_short_domains):
     '''
-    A function which returns True if a domain is in a list_of_domains. 
+    A function which returns True if a domain is in a list_of_domains.
     Make sure that domain and list_of_domains is preprocessed (or not at all),
     in the same way.
-    
+
     :input domain: (str) a standardized domain name
     :input list_of_domains: (list of str) of standardized domain names
     :returns: boolean
@@ -99,7 +101,7 @@ def _parse_error(error, verbose=False):
     '''
     Although some redirects no longer work, we can still use the response from the error to figure out where it would have gone.
     This function parses error messages from requests.head (called in expand), to try to figure out what website the bit-link was intended to re-direct to.
-    
+
     :param error: a string of the error response from unshorten.
     :returns: the domain parsed from the error string, and the long_url. If the error can't be parsed, the domain is -1
     '''
@@ -110,19 +112,19 @@ def _parse_error(error, verbose=False):
         domain = vals[0]
         url_endpoint = vals[1].split('Max retries exceeded with url: ')[-1].split(" (Caused by")[0]
         url_endpoint = os.path.join('http://', domain, '__CONNECTIONPOOL_ERROR__')
-        
+
     elif 'Client Error: ' in error or 'Server Error' in error:
         if verbose:
             print("ConnectionError or Server Error")
         url_endpoint = error.split(" for url: ")[-1]
         domain = get_domain(url_endpoint)
         url_endpoint = os.path.join('http://', domain, '__CLIENT_ERROR__')
-        
+
     else:
         if verbose:
             print("Unknown error")
         domain, url_endpoint = -1, None
-    
+
     return domain, url_endpoint
 
 
@@ -130,21 +132,22 @@ def _expand(link, timeout=2, verbose=False, **kwargs):
     '''
     Expands a url, while taking into consideration: special link shortener or analytics platforms that either need a sophisticated
     redirect(st.sh), or parsing of the url (ln.is)
-    
+
     :param link: string of a link to unshorten.
     :returns: a dictionary with the original link, the unshortened link, and the unshortened domain.
     '''
     try:
-        r = requests.head(link, 
-                          allow_redirects=True, 
+        r = requests.head(link,
+                          allow_redirects=True,
                           timeout=timeout,
+                          headers=HEADERS,
                           **kwargs)
         r.raise_for_status()
         url_long = r.url
         domain = get_domain(url_long)
         if verbose:
             print("First expansion OK")
-        
+
     except requests.exceptions.RequestException as e:
         if verbose:
             print("First expansion Failed")
@@ -156,25 +159,25 @@ def _expand(link, timeout=2, verbose=False, **kwargs):
             print("domain in url appenders")
         url_long = url_long.replace(domain, '')
         domain = get_domain(url_long)
-    
+
     elif domain in constants.short_domain_ad_redirects or domain == -1:
         if verbose:
             print("domain in ad redirect")
         url_long = unshortenit.UnshortenIt().unshorten(link,
                                                        timeout=timeout)
         domain = get_domain(url_long)
-        
+
 
     return dict(original_url=link,
                 resolved_domain=domain,
                 resolved_url=url_long)
 
-def expand(links_to_unshorten, chunksize=1280, n_workers=1, 
-           cache_file=None, random_seed=303, 
+def expand(links_to_unshorten, chunksize=1280, n_workers=1,
+           cache_file=None, random_seed=303,
            verbose=0, filter_function=None, **kwargs):
     '''
     Calls expand with multiple (``n_workers``) threads to unshorten a list of urls. Unshortens all urls by default, unless one sets a ``filter_function``.
-    
+
     :param links_to_unshorten: (list, str) either an idividual or list (str) of urls to unshorten
     :param chunksize: (int) chunks links_to_unshorten, which makes computation quicker with larger inputs
     :param n_workers: (int) how many threads
@@ -182,14 +185,14 @@ def expand(links_to_unshorten, chunksize=1280, n_workers=1,
     :param random_seed: (int) initializes the random state for shuffling the input
     :param verbose: (int) whether to print updates and errors. 0 is silent. 1 is progress bar. 2 is progress bar and errors.
     :param filter_function: (func) a boolean used to filter url shorteners out
-        
-    
+
+
     :returns: (list) a list of resolved urls
     '''
-    
+
     if isinstance(links_to_unshorten, str):
         return _expand(links_to_unshorten, **kwargs)['resolved_url']
-    
+
     else:
         links_to_unshorten_ = links_to_unshorten.copy()
 
@@ -215,7 +218,7 @@ def expand(links_to_unshorten, chunksize=1280, n_workers=1,
                     unshortened_urls.append(json.loads(line))
                 abd_ = [_['original_url'] for _ in unshortened_urls]
                 links_to_unshorten = list(set(abd_).symmetric_difference(set(links_to_unshorten)))
-        
+
         # chunk the list of arguments
         if verbose:
             print("There are {} links to unshorten".format(len(links_to_unshorten)))
@@ -223,11 +226,11 @@ def expand(links_to_unshorten, chunksize=1280, n_workers=1,
             chunk_iter = tqdm(_chunks(links_to_unshorten, chunksize=chunksize), total=total)
         else:
             chunk_iter = _chunks(links_to_unshorten, chunksize=chunksize)
-        
+
         for chunk in chunk_iter:
             # create n_workers threads, and map chunked argumnets to them
             with concurrent.futures.ThreadPoolExecutor(max_workers = n_workers) as executor:
-                future_to_url = {executor.submit(_expand, url, **kwargs): 
+                future_to_url = {executor.submit(_expand, url, **kwargs):
                                  url for url in chunk}
                 for i, future in enumerate(concurrent.futures.as_completed(future_to_url)):
                     try:
@@ -254,12 +257,12 @@ def expand(links_to_unshorten, chunksize=1280, n_workers=1,
 
 
 def multithread_function(links_to_unshorten, function, cache_col,
-                         chunksize=1280, n_workers=64, 
-                         cache_file=None, random_seed=303, 
+                         chunksize=1280, n_workers=64,
+                         cache_file=None, random_seed=303,
                          verbose=0, **kwargs):
     '''
     Calls 'function' with multiple (n_workers) threads.
-    
+
     :param links_to_unshorten: (list) a list of urls (str) to unshorten
     :param chunksize: (int) chunks links_to_unshorten, which makes computation quicker with larger inputs
     :param n_workers: (int) how many threads
@@ -267,10 +270,10 @@ def multithread_function(links_to_unshorten, function, cache_col,
     :param cache_file: (str) a path to a json file to read and write results in
     :param random_seed: (int) initializes the random state for shuffling the input
     :param verbose: (bool) whether to return errors and updates
-        
-    
+
+
     :returns: (list) a list of dictionaries perfect for Pandas Dataframes.
-    ''' 
+    '''
     # shuffle the inputs, this is to reduce the changes of making requests to the same domain.
     np.random.seed(random_seed)
     np.random.shuffle(links_to_unshorten)
@@ -284,7 +287,7 @@ def multithread_function(links_to_unshorten, function, cache_col,
                 unshortened_urls.append(json.loads(line))
             abd_ = [_[cache_col] for _ in unshortened_urls]
             links_to_unshorten = [link for link in links_to_unshorten if link not in abd_]
-    
+
     if verbose:
         chunk_iter = tqdm(_chunks(links_to_unshorten, chunksize=chunksize))
     else:
@@ -293,7 +296,7 @@ def multithread_function(links_to_unshorten, function, cache_col,
     for chunk in chunk_iter:
         # create n_workers threads, and map chunked argumnets to them
         with concurrent.futures.ThreadPoolExecutor(max_workers = n_workers) as executor:
-            future_to_url = {executor.submit(function, url, **kwargs): 
+            future_to_url = {executor.submit(function, url, **kwargs):
                              url for url in chunk}
             for i, future in enumerate(concurrent.futures.as_completed(future_to_url)):
                 try:
@@ -310,6 +313,5 @@ def multithread_function(links_to_unshorten, function, cache_col,
                         if cache_file:
                             with open(cache_file, 'a') as f_:
                                 f_.write(json.dumps(data) + '\n')
-    
+
     return unshortened_urls
-    
