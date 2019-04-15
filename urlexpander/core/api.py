@@ -30,7 +30,7 @@ __all__ = ['strip_url',
 
 __author__ = 'Leon Yin'
 
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36'}
+HEADERS = {'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'}
 
 def strip_url(url):
     '''
